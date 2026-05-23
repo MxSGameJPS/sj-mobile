@@ -34,7 +34,7 @@ export default function LawyerBlindagemProvasScreen({ route, navigation }) {
       if (profileJson.success && profileJson.data) {
         const p = profileJson.data;
         setLawyerProfile({
-          plan_type: p.plan_type || 'PRO',
+          plan_type: p.plan_type || 'FREE',
           juris_balance: p.balance || 0
         });
       }
@@ -63,6 +63,22 @@ export default function LawyerBlindagemProvasScreen({ route, navigation }) {
   };
 
   const handleShieldDocument = async () => {
+    if (lawyerProfile.plan_type === 'FREE') {
+      Alert.alert(
+        'Plano Requerido',
+        'A Blindagem de Provas é uma ferramenta exclusiva dos planos START e PRO.\n\nGerencie seu plano no portal web para obter acesso.'
+      );
+      return;
+    }
+
+    if (lawyerProfile.plan_type === 'START' && (lawyerProfile.juris_balance || 0) < 4) {
+      Alert.alert(
+        'Saldo Insuficiente',
+        'Você precisa de 4 Juris para blindar o documento.\n\nPara alterações cadastrais ou gerenciamento do saldo, acesse o portal web do SocialJurídico:\n\nsocialjuridico.com.br'
+      );
+      return;
+    }
+
     if (!uploadedFile) {
       Alert.alert('Atenção', 'Selecione um arquivo para blindar.');
       return;
@@ -105,7 +121,10 @@ export default function LawyerBlindagemProvasScreen({ route, navigation }) {
         Alert.alert('✅ Sucesso', 'Prova digital blindada na blockchain com sucesso!');
       } else {
         if (dataJson.error_type === 'INSUFFICIENT_JURIS') {
-          Alert.alert('Saldo Insuficiente', 'Você precisa de 4 Juris para blindar o documento.');
+          Alert.alert(
+            'Saldo Insuficiente',
+            'Você precisa de 4 Juris para blindar o documento.\n\nPara alterações cadastrais ou gerenciamento do saldo, acesse o portal web do SocialJurídico:\n\nsocialjuridico.com.br'
+          );
         } else {
           Alert.alert('Erro', dataJson.message || 'Erro ao blindar a prova.');
         }

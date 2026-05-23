@@ -73,7 +73,7 @@ export default function LawyerAgendaScreen({ route, navigation }) {
         setLawyerProfile({
           name: resJson.data.name || 'Advogado',
           juris_balance: resJson.data.balance || 0,
-          plan_type: resJson.data.plan_type || 'PRO'
+          plan_type: resJson.data.plan_type || 'FREE'
         });
       }
     } catch (e) {
@@ -386,7 +386,13 @@ export default function LawyerAgendaScreen({ route, navigation }) {
 
           <TouchableOpacity 
             style={styles.newBtn}
-            onPress={() => navigation.navigate('LawyerAgendaNovo', { user, session, crmClients })}
+            onPress={() => navigation.navigate('LawyerAgendaNovo', { 
+              user, 
+              session, 
+              crmClients,
+              planType: lawyerProfile.plan_type,
+              agendaCount: agendaItems.length
+            })}
           >
             <Feather name="plus" size={16} color="#090a0d" style={{ marginRight: 4 }} />
             <Text style={styles.newBtnText}>Novo</Text>

@@ -49,7 +49,27 @@ const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '--';
 const DOSSIER_TABS = ['Geral', 'Interações', 'Financeiro', 'Análise IA', 'Casos'];
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────
-export default function CRMTab({ userId, accessToken }) {
+export default function CRMTab({ userId, accessToken, planType, onPlanUpgrade }) {
+  
+  const checkCrmLimit = () => {
+    if (planType === 'FREE') {
+      if (onPlanUpgrade) {
+        onPlanUpgrade('O CRM de Clientes é uma ferramenta exclusiva dos planos START e PRO.\n\nGerencie seu plano no portal web para obter acesso.');
+      } else {
+        Alert.alert('Acesso Restrito', 'O CRM de Clientes é uma ferramenta exclusiva dos planos START e PRO.\n\nGerencie seu plano no portal web para obter acesso.');
+      }
+      return false;
+    }
+    if (planType === 'START' && clients.length >= 10) {
+      if (onPlanUpgrade) {
+        onPlanUpgrade('Você atingiu o limite de 10 clientes do Plano START. Faça upgrade para o Plano PRO para gerenciar clientes ilimitados.');
+      } else {
+        Alert.alert('Limite Atingido', 'Você atingiu o limite de 10 clientes do Plano START. Faça upgrade para continuar.');
+      }
+      return false;
+    }
+    return true;
+  };
   // ── Core state ──
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -226,10 +246,14 @@ export default function CRMTab({ userId, accessToken }) {
             }
           }
         );
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        if (data.success) setInsight(data.insight);
-        else setInsight(data.message || 'Não foi possível gerar o insight.');
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 403 || data.limitReached) {
+          setInsight('LIMIT_REACHED');
+        } else if (res.ok && data.success) {
+          setInsight(data.insight);
+        } else {
+          setInsight(data.message || 'Não foi possível gerar o insight.');
+        }
       } catch (e) {
         console.error('[CRM] insight:', e);
         setInsight('Erro ao conectar com a IA.');
@@ -627,17 +651,21 @@ export default function CRMTab({ userId, accessToken }) {
 
         {/* ── Action buttons ── */}
         <View style={s.actionRow}>
-          <TouchableOpacity style={[s.actionBtn, s.btnRed]} onPress={() => setShowVoice(true)}>
+          <TouchableOpacity style={[s.actionBtn, s.btnRed]} onPress={() => { if (checkCrmLimit()) setShowVoice(true); }}>
             <Feather name="mic" size={14} color="#ff453a" />
             <Text style={[s.actionTxt, { color: '#ff453a' }]}>Comando{'\n'}de Voz</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[s.actionBtn, s.btnGray, extracting && { opacity: 0.6 }]}
-            onPress={() => Alert.alert('Extração IA', 'Selecionar origem:', [
-              { text: 'PDF / Documento', onPress: handleExtractPDF },
-              { text: 'Galeria de Fotos', onPress: handleExtractPhoto },
-              { text: 'Cancelar', style: 'cancel' },
-            ])}
+            onPress={() => {
+              if (checkCrmLimit()) {
+                Alert.alert('Extração IA', 'Selecionar origem:', [
+                  { text: 'PDF / Documento', onPress: handleExtractPDF },
+                  { text: 'Galeria de Fotos', onPress: handleExtractPhoto },
+                  { text: 'Cancelar', style: 'cancel' },
+                ]);
+              }
+            }}
             disabled={extracting}
           >
             {extracting
@@ -646,7 +674,7 @@ export default function CRMTab({ userId, accessToken }) {
             }
             <Text style={[s.actionTxt, { color: '#a3a9c2' }]}>{extracting ? 'Extraindo...' : 'Extração IA'}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[s.actionBtn, s.btnGold]} onPress={() => { resetForm(); setShowNewClient(true); }}>
+          <TouchableOpacity style={[s.actionBtn, s.btnGold]} onPress={() => { if (checkCrmLimit()) { resetForm(); setShowNewClient(true); } }}>
             <Feather name="user-plus" size={14} color="#f5c853" />
             <Text style={[s.actionTxt, { color: '#f5c853' }]}>Novo{'\n'}Cliente</Text>
           </TouchableOpacity>
@@ -727,7 +755,12 @@ export default function CRMTab({ userId, accessToken }) {
             <Feather name="users" size={40} color="#2b2d36" />
             <Text style={s.emptyTxt}>{search ? 'Nenhum cliente encontrado.' : 'Nenhum cliente cadastrado.'}</Text>
             {!search && (
-              <TouchableOpacity style={s.emptyBtn} onPress={() => { resetForm(); setShowNewClient(true); }}>
+              <TouchableOpacity style={s.emptyBtn} onPress={() => {
+                if (checkCrmLimit()) {
+                  resetForm();
+                  setShowNewClient(true);
+                }
+              }}>
                 <Text style={s.emptyBtnTxt}>+ Cadastrar primeiro cliente</Text>
               </TouchableOpacity>
             )}
@@ -986,7 +1019,16 @@ export default function CRMTab({ userId, accessToken }) {
                 />
               )}
               {dossierTab === 'Análise IA' && (
-                <DossierInsight insight={insight} loading={loadingInsight} />
+                <DossierInsight 
+                  insight={insight} 
+                  loading={loadingInsight} 
+                  onUpgrade={() => {
+                    setShowDossier(false);
+                    if (onPlanUpgrade) {
+                      onPlanUpgrade('Você atingiu o limite de 5 insights do Plano START.\n\nEfetue o upgrade para o Plano PRO no portal web para acesso ilimitado.');
+                    }
+                  }}
+                />
               )}
               {dossierTab === 'Casos' && (
                 <DossierCases cases={clientCases} loading={loadingCases} />
@@ -1237,7 +1279,7 @@ function DossierFinance({ records, loading, showForm, setShowForm, financeForm, 
   );
 }
 
-function DossierInsight({ insight, loading }) {
+function DossierInsight({ insight, loading, onUpgrade }) {
   return (
     <View style={s.dSection}>
       <View style={s.insightCard}>
@@ -1250,15 +1292,33 @@ function DossierInsight({ insight, loading }) {
             <ActivityIndicator color="#f5c853" />
             <Text style={s.loadTxt}>Gerando análise com IA...</Text>
           </View>
+        ) : insight === 'LIMIT_REACHED' ? (
+          <View style={{ gap: 12, alignItems: 'center', paddingVertical: 10 }}>
+            <Text style={[s.insightTxt, { color: '#ff453a', textAlign: 'center', fontWeight: 'bold' }]}>
+              Você atingiu o limite de 5 insights do Plano START.
+            </Text>
+            <Text style={{ color: '#8e94a2', fontSize: 12, textAlign: 'center', marginBottom: 10 }}>
+              Faça upgrade para o Plano PRO para obter insights estratégicos de inteligência jurídica ilimitados para todos os seus clientes.
+            </Text>
+            <TouchableOpacity 
+              style={[s.saveBtn, { backgroundColor: '#f5c853', width: '100%' }]}
+              onPress={onUpgrade}
+            >
+              <Feather name="trending-up" size={16} color="#000" />
+              <Text style={s.saveBtnTxt}>FAZER UPGRADE PARA PRO</Text>
+            </TouchableOpacity>
+          </View>
         ) : insight ? (
           <Text style={s.insightTxt}>{insight}</Text>
         ) : (
           <Text style={s.emptyTxt}>Toque em "Análise IA" para gerar um insight sobre este cliente.</Text>
         )}
       </View>
-      <Text style={s.insightDisclaimer}>
-        ⚠️ A análise de IA é um auxílio estratégico e não substitui o julgamento profissional do advogado.
-      </Text>
+      {insight !== 'LIMIT_REACHED' && (
+        <Text style={s.insightDisclaimer}>
+          ⚠️ A análise de IA é um auxílio estratégico e não substitui o julgamento profissional do advogado.
+        </Text>
+      )}
     </View>
   );
 }

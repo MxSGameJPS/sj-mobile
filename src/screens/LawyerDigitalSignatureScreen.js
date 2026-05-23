@@ -191,9 +191,9 @@ export default function LawyerDigitalSignatureScreen({ route, navigation }) {
   };
 
   // Copiar link do cliente
-  const handleCopyClientLink = async (item) => {
+  const handleCopyClientLink = (item) => {
     const link = `https://socialjuridico.com.br/assinatura/${item.id}?role=client`;
-    await Clipboard.setStringAsync(link);
+    Clipboard.setString(link);
     Alert.alert('Copiado', 'Link de assinatura do cliente copiado para a área de transferência!');
   };
 

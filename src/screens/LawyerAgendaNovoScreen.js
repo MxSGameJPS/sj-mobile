@@ -27,11 +27,13 @@ const WEB_API = __DEV__
   : 'https://socialjuridico.com.br/api';
 
 export default function LawyerAgendaNovoScreen({ route, navigation }) {
-  const { user: initialUser, session: initialSession, crmClients: initialCrmClients } = route.params || {};
+  const { user: initialUser, session: initialSession, crmClients: initialCrmClients, planType: initialPlanType, agendaCount: initialAgendaCount } = route.params || {};
   
   const [user, setUser] = useState(initialUser);
   const [session, setSession] = useState(initialSession);
   const [clients, setClients] = useState(initialCrmClients || []);
+  const [planType, setPlanType] = useState(initialPlanType || 'FREE');
+  const [agendaCount, setAgendaCount] = useState(initialAgendaCount || 0);
 
   // Form states
   const [title, setTitle] = useState('');
@@ -206,6 +208,22 @@ export default function LawyerAgendaNovoScreen({ route, navigation }) {
 
   // Submit Handler
   const handleSave = async () => {
+    if (planType === 'FREE') {
+      Alert.alert(
+        'Plano Requerido',
+        'A Agenda Inteligente é uma ferramenta exclusiva dos planos START e PRO.\n\nGerencie seu plano no portal web para obter acesso.'
+      );
+      return;
+    }
+
+    if (planType === 'START' && agendaCount >= 30) {
+      Alert.alert(
+        'Limite Atingido',
+        'Você atingiu o limite de 30 compromissos do Plano START.\n\nPara alterações cadastrais ou gerenciamento do plano, acesse o portal web do SocialJurídico:\n\nsocialjuridico.com.br'
+      );
+      return;
+    }
+
     if (!title.trim()) {
       Alert.alert('Erro', 'Por favor, informe o título do compromisso.');
       return;
@@ -265,7 +283,10 @@ export default function LawyerAgendaNovoScreen({ route, navigation }) {
         navigation.navigate('LawyerAgenda', { user, session });
       } else {
         if (json.message === 'LIMIT_REACHED') {
-          Alert.alert('Upgrade Necessário', 'Você atingiu o limite de compromissos do seu plano atual.');
+          Alert.alert(
+            'Limite Atingido',
+            'Você atingiu o limite de compromissos do seu plano atual.\n\nPara alterações cadastrais ou gerenciamento do plano, acesse o portal web do SocialJurídico:\n\nsocialjuridico.com.br'
+          );
         } else {
           Alert.alert('Erro', json.message || 'Ocorreu um erro ao salvar o compromisso.');
         }

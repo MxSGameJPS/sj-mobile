@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 
-export default function MarketplaceTab({ lawyerProfile, openCases, activeCases, refreshControl }) {
+export default function MarketplaceTab({ lawyerProfile, openCases, activeCases, refreshControl, onPlanPress, onJurisPress, onManifestInterest }) {
   
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
@@ -19,29 +19,41 @@ export default function MarketplaceTab({ lawyerProfile, openCases, activeCases, 
           </View>
         )}
       </View>
-
+ 
       {/* Cards de Status */}
       <View style={styles.statusCardsRow}>
         
         {/* Plano Atual */}
-        <View style={styles.statusCard}>
+        <TouchableOpacity style={styles.statusCard} activeOpacity={0.7} onPress={onPlanPress}>
           <View style={styles.planIconBox}>
             <Feather name="award" size={24} color="#f5c853" />
           </View>
           <View style={styles.planInfo}>
             <Text style={styles.cardLabel}>PLANO ATUAL</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Text style={styles.planTitle}>{lawyerProfile?.plan_type === 'PRO' ? 'PRO Ativo' : 'FREE'}</Text>
+              <Text style={styles.planTitle}>
+                {lawyerProfile?.plan_type === 'PRO'
+                  ? 'PRO'
+                  : lawyerProfile?.plan_type === 'START'
+                  ? 'START'
+                  : 'FREE'}
+              </Text>
               <View style={styles.onlineBadge}>
                 <Text style={styles.onlineBadgeText}>ONLINE</Text>
               </View>
             </View>
-            <Text style={styles.planSubtitle}>SHA-256 | Blindagem Ilimitada</Text>
+            <Text style={styles.planSubtitle}>
+              {lawyerProfile?.plan_type === 'PRO'
+                ? 'SHA-256 | Blindagem Ilimitada'
+                : lawyerProfile?.plan_type === 'START'
+                ? 'CRM + Agenda + Redator IA'
+                : 'Marketplace de Casos'}
+            </Text>
           </View>
-        </View>
-
+        </TouchableOpacity>
+ 
         {/* Saldo Juris */}
-        <View style={styles.saldoCard}>
+        <TouchableOpacity style={styles.saldoCard} activeOpacity={0.7} onPress={onJurisPress}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
             <Feather name="credit-card" size={20} color="#f5c853" style={{ marginRight: 10 }} />
             <View>
@@ -49,7 +61,7 @@ export default function MarketplaceTab({ lawyerProfile, openCases, activeCases, 
               <Text style={styles.saldoTitle}>{lawyerProfile?.juris_balance || 0} Juris</Text>
             </View>
           </View>
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* Marketplace de Casos */}
@@ -82,7 +94,10 @@ export default function MarketplaceTab({ lawyerProfile, openCases, activeCases, 
               <MaterialCommunityIcons name="scale-balance" size={14} color="#f5c853" />
               <Text style={styles.jurisCostText}>{item.cost || 1} Juri{item.cost > 1 ? 's' : ''}</Text>
             </View>
-            <TouchableOpacity style={styles.manifestBtn}>
+            <TouchableOpacity 
+              style={styles.manifestBtn}
+              onPress={() => onManifestInterest && onManifestInterest(item)}
+            >
               <Text style={styles.manifestBtnText}>Manifestar Interesse</Text>
             </TouchableOpacity>
           </View>

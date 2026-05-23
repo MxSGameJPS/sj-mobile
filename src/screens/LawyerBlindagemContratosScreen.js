@@ -77,7 +77,12 @@ export default function LawyerBlindagemContratosScreen({ route, navigation }) {
         body: JSON.stringify(payload)
       });
       const resJson = await res.json();
-      if (resJson.success && resJson.draft) {
+      if (res.status === 403 || resJson.message === 'LIMIT_REACHED' || resJson.error_type === 'QUOTA_EXCEEDED') {
+        Alert.alert(
+          'Limite Atingido',
+          'Você atingiu o limite de utilização do Redator de IA para o seu plano atual.\n\nPara alterações cadastrais ou gerenciamento do plano, acesse o portal web do SocialJurídico:\n\nsocialjuridico.com.br'
+        );
+      } else if (resJson.success && resJson.draft) {
         setDraft(resJson.draft);
         setShowResult(true);
       } else {

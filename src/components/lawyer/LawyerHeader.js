@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 
-export default function LawyerHeader({ onMenuPress, onBellPress, jurisBalance = 0 }) {
+export default function LawyerHeader({ onMenuPress, onBellPress, onJurisPress, jurisBalance = 0 }) {
   return (
     <View style={styles.header}>
       {/* Logo e Menu */}
@@ -19,7 +19,7 @@ export default function LawyerHeader({ onMenuPress, onBellPress, jurisBalance = 
 
       {/* Saldo e Notificações */}
       <View style={styles.rightContainer}>
-        <TouchableOpacity style={styles.jurisBadge} activeOpacity={0.8}>
+        <TouchableOpacity style={styles.jurisBadge} activeOpacity={0.8} onPress={onJurisPress}>
           <Text style={styles.jurisText}>{jurisBalance} Juris</Text>
         </TouchableOpacity>
         

@@ -2,8 +2,19 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, Alert } from 'react-native';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 
-export default function LawyerSidebar({ visible, onClose, lawyerProfile = {}, navigation, onLogout, user, session, setCurrentTab }) {
+export default function LawyerSidebar({ visible, onClose, lawyerProfile = {}, navigation, onLogout, user, session, setCurrentTab, onPlanPress, onJurisPress }) {
   
+  const isFree = lawyerProfile.plan_type === 'FREE';
+  const isStart = lawyerProfile.plan_type === 'START';
+
+  const checkFreeAccess = (featureName, callback) => {
+    if (isFree) {
+      onPlanPress(`A ferramenta "${featureName}" é exclusiva para assinantes dos planos START e PRO.\n\nGerencie sua assinatura no portal web para liberar o acesso.`);
+      return;
+    }
+    callback();
+  };
+
   const handleNotImplemented = (featureName) => {
     Alert.alert('Recurso Web', `A ferramenta "${featureName}" está disponível exclusivamente no painel Web do SocialJurídico.`);
   };
@@ -44,74 +55,99 @@ export default function LawyerSidebar({ visible, onClose, lawyerProfile = {}, na
               </View>
               <View style={styles.profileInfo}>
                 <Text style={styles.profileName}>{lawyerProfile.name || 'Advogado'}</Text>
-                <View style={styles.proBadge}>
+                <TouchableOpacity style={styles.proBadge} activeOpacity={0.7} onPress={() => onPlanPress()}>
                   <Feather name="star" size={10} color="#090a0d" />
-                  <Text style={styles.proBadgeText}>Plano PRO</Text>
-                </View>
+                  <Text style={styles.proBadgeText}>Plano {lawyerProfile.plan_type || 'FREE'}</Text>
+                </TouchableOpacity>
               </View>
             </View>
 
             {/* Saldo Section */}
-            <View style={styles.saldoBox}>
+            <TouchableOpacity style={styles.saldoBox} activeOpacity={0.7} onPress={onJurisPress}>
               <Text style={styles.saldoLabel}>SALDO JURIS</Text>
               <Text style={styles.saldoValue}>{lawyerProfile.juris_balance || 0}</Text>
-            </View>
+            </TouchableOpacity>
 
             {/* Ferramentas Menu */}
             <View style={styles.menuSection}>
               <Text style={styles.menuSectionTitle}>Ferramentas</Text>
 
               <TouchableOpacity style={styles.menuItem} onPress={() => {
-                onClose();
-                navigation.navigate('LawyerDigitalSignature', { user, session });
+                checkFreeAccess('Assinatura Digital', () => {
+                  onClose();
+                  navigation.navigate('LawyerDigitalSignature', { user, session });
+                });
               }}>
                 <Feather name="edit-3" size={20} color="#a0a5b0" style={styles.menuIcon} />
                 <Text style={styles.menuItemText}>Assinatura Digital</Text>
+                {isFree && <Feather name="lock" size={14} color="#8e94a2" style={{ marginLeft: 'auto', opacity: 0.6 }} />}
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.menuItem} onPress={() => {
-                onClose();
-                if (setCurrentTab) setCurrentTab('CRM');
+                checkFreeAccess('CRM de Clientes', () => {
+                  onClose();
+                  if (setCurrentTab) setCurrentTab('CRM');
+                });
               }}>
                 <Feather name="users" size={20} color="#a0a5b0" style={styles.menuIcon} />
                 <Text style={styles.menuItemText}>Meus Clientes (CRM)</Text>
+                {isFree && <Feather name="lock" size={14} color="#8e94a2" style={{ marginLeft: 'auto', opacity: 0.6 }} />}
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.menuItem} onPress={() => {
-                onClose();
-                navigation.navigate('LawyerInterests', { user, session });
+                checkFreeAccess('Declarei Interesse', () => {
+                  onClose();
+                  navigation.navigate('LawyerInterests', { user, session });
+                });
               }}>
                 <Feather name="bookmark" size={20} color="#a0a5b0" style={styles.menuIcon} />
                 <Text style={styles.menuItemText}>Declarei Interesse</Text>
+                {isFree && <Feather name="lock" size={14} color="#8e94a2" style={{ marginLeft: 'auto', opacity: 0.6 }} />}
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.menuItem} onPress={() => {
-                onClose();
-                navigation.navigate('LawyerCases', { user, session });
+                checkFreeAccess('Meus Casos', () => {
+                  onClose();
+                  navigation.navigate('LawyerCases', { user, session });
+                });
               }}>
                 <Feather name="briefcase" size={20} color="#a0a5b0" style={styles.menuIcon} />
                 <Text style={styles.menuItemText}>Meus Casos</Text>
+                {isFree && <Feather name="lock" size={14} color="#8e94a2" style={{ marginLeft: 'auto', opacity: 0.6 }} />}
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.menuItem} onPress={() => {
-                onClose();
-                navigation.navigate('LawyerBlindagemDashboard', { user, session });
+                checkFreeAccess('Blindagem de Provas', () => {
+                  onClose();
+                  navigation.navigate('LawyerBlindagemDashboard', { user, session });
+                });
               }}>
                 <Feather name="shield" size={20} color="#a0a5b0" style={styles.menuIcon} />
                 <Text style={styles.menuItemText}>Blindagem de Provas</Text>
+                {isFree && <Feather name="lock" size={14} color="#8e94a2" style={{ marginLeft: 'auto', opacity: 0.6 }} />}
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.menuItem} onPress={() => {
-                onClose();
-                navigation.navigate('LawyerAgenda', { user, session });
+                checkFreeAccess('Agenda e Prazos', () => {
+                  onClose();
+                  navigation.navigate('LawyerAgenda', { user, session });
+                });
               }}>
                 <Feather name="calendar" size={20} color="#a0a5b0" style={styles.menuIcon} />
                 <Text style={styles.menuItemText}>Agenda e Prazos</Text>
+                {isFree && <Feather name="lock" size={14} color="#8e94a2" style={{ marginLeft: 'auto', opacity: 0.6 }} />}
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.menuItem} onPress={() => handleNotImplemented('Calculadora')}>
+              <TouchableOpacity style={styles.menuItem} onPress={() => {
+                if (isFree || isStart) {
+                  onPlanPress('A "Calculadora Jurídica" é exclusiva para assinantes do Plano PRO.\n\nGerencie sua assinatura no portal web para liberar o acesso.');
+                  return;
+                }
+                handleNotImplemented('Calculadora');
+              }}>
                 <Feather name="grid" size={20} color="#a0a5b0" style={styles.menuIcon} />
                 <Text style={styles.menuItemText}>Calculadora</Text>
+                {(isFree || isStart) && <Feather name="lock" size={14} color="#8e94a2" style={{ marginLeft: 'auto', opacity: 0.6 }} />}
               </TouchableOpacity>
             </View>
 
