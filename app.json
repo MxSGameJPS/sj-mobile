@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "SocialJurídico",
+    "slug": "socialjuridico",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.socialjuridico.app"
+    },
+    "android": {
+      "package": "com.socialjuridico.app",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-font",
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#0d1117"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "b4d00c61-52a5-4241-9cb6-7a3f697c45c8"
+      }
+    },
+    "owner": "mxsgamejps"
+  }
+}
