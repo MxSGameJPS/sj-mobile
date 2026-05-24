@@ -33,6 +33,17 @@ yarn-error.*
 # local env files
 .env*.local
 
+# Sensitive files (do not commit)
+google-services.json
+google-services.plist
+eas.json
+serviceAccount*.json
+*.jks
+*.p12
+*.p8
+*.key
+*.pem
+
 # typescript
 *.tsbuildinfo
 
