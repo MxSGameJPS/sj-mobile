@@ -22,7 +22,7 @@ const WEB_API = __DEV__
 const SUPABASE_URL = 'https://uwkcdwlgobnhowumcdnp.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV3a2Nkd2xnb2JuaG93dW1jZG5wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2MTEyNDIsImV4cCI6MjA4OTE4NzI0Mn0.Nz-2pITIzlzZW-sePHXAyW6Kz19p45vlMN22Z8VEYEk';
 
-export default function MensagensTab({ userId, accessToken, searchQuery, setCurrentTab }) {
+export default function MensagensTab({ userId, accessToken, searchQuery, setCurrentTab, deepLinkChat, onChatOpened }) {
   // Controle de Abas Superiores
   const [activeSubTab, setActiveSubTab] = useState('NOTIFICACOES'); // 'NOTIFICACOES' | 'CONVERSAS'
 
@@ -151,8 +151,8 @@ export default function MensagensTab({ userId, accessToken, searchQuery, setCurr
               type: 'NEGOTIATING',
               caseId: interest.case_id,
               interestId: interest.id,
-              title: interest.title || interest.caso?.titulo || 'Caso em Negociação',
-              clientId: interest.caso?.cliente_id,
+              title: interest.title || interest.casos?.titulo || 'Caso em Negociação',
+              clientId: interest.casos?.cliente_id,
             });
           }
         }
@@ -177,6 +177,18 @@ export default function MensagensTab({ userId, accessToken, searchQuery, setCurr
     fetchNotifications();
     loadChannels();
   }, [fetchNotifications, loadChannels]);
+
+  // Redirecionamento e abertura automática do chat por Deep Link (vinda de LawyerInterestsScreen)
+  useEffect(() => {
+    if (deepLinkChat && deepLinkChat.caseId) {
+      setActiveChatCaseId(deepLinkChat.caseId);
+      setActiveChatInterestId(deepLinkChat.interestId);
+      setActiveSubTab('CONVERSAS');
+      if (onChatOpened) {
+        onChatOpened();
+      }
+    }
+  }, [deepLinkChat, onChatOpened]);
 
   // --- SELETOR DE ATENDIMENTO DE NOTIFICAÇÕES ---
   const handleMarkAsRead = async (msg) => {
@@ -910,6 +922,15 @@ export default function MensagensTab({ userId, accessToken, searchQuery, setCurr
   }
 
   // --- RENDERIZAR ABAS PRINCIPAIS ---
+  // filteredNotifications: derivada de notifications + searchQuery
+  // (filteredChannels já definida acima com suporte a searchQuery)
+  const filteredNotifications = searchQuery
+    ? notifications.filter(n =>
+        (n.titulo || n.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (n.mensagem || n.message || n.body || '').toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : notifications;
+
   return (
     <View style={styles.container}>
       {/* Sub Tab Switcher */}
@@ -957,7 +978,7 @@ export default function MensagensTab({ userId, accessToken, searchQuery, setCurr
           keyExtractor={item => item.id}
           contentContainerStyle={styles.listContent}
           refreshControl={
-            <RefreshControl refreshing={refreshingChannels} onRefresh={() => loadChannels(true)} tintColor="#f5c853" />
+            <RefreshControl refreshing={refreshingChannels} onRefresh={() => loadChannels(true)} tintColor="#f5c853" colors={["#f5c853"]} />
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>

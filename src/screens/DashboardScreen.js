@@ -14,6 +14,7 @@ import {
   Modal,
   KeyboardAvoidingView,
   Linking,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -25,6 +26,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 import { Audio } from 'expo-av';
 import * as Notifications from 'expo-notifications';
+import { registerForPushNotificationsAsync } from '../services/pushNotificationService';
 
 const BRAZILIAN_STATES = [
   'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA',
@@ -151,6 +153,14 @@ export default function DashboardScreen({ route, navigation }) {
   const [notifications, setNotifications] = useState([]);
   const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState(false);
 
+  // Refresh
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  };
+
   // Reviews / Avaliações
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [reviewScore, setReviewScore] = useState(0);
@@ -200,8 +210,15 @@ export default function DashboardScreen({ route, navigation }) {
       setLoading(false);
       return;
     }
+
+    // Registrar token de push notification do cliente
+    registerForPushNotificationsAsync(session.accessToken).catch(err => {
+      console.warn('[DashboardScreen] Erro ao registrar push para o cliente:', err);
+    });
+
     try {
       setLoading(true);
+      console.log('[DashboardScreen] Iniciando carregamento de dados para o usuário:', user.email);
       
       // 1. Buscar perfil do cliente (com fallback por email)
       const profileData = await supabaseService.getClientProfile(user.id, session.accessToken, user.email);
@@ -212,6 +229,7 @@ export default function DashboardScreen({ route, navigation }) {
         setProfilePhone(profileData.phone || '');
         clientId = profileData.id;
       }
+      console.log('[DashboardScreen] Perfil do cliente carregado. clientId:', clientId);
 
       // 2. Buscar todos os advogados do banco
       const allLawyers = await supabaseService.getLawyersList(session.accessToken);
@@ -225,6 +243,7 @@ export default function DashboardScreen({ route, navigation }) {
       const casesData = await supabaseService.getClientCases(clientId, session.accessToken);
       if (casesData) {
         setCases(casesData);
+        console.log('[DashboardScreen] Casos do cliente carregados:', casesData.length);
         
         // Mapear informações dos advogados correspondentes
         const fetchedLawyers = {};
@@ -253,10 +272,12 @@ export default function DashboardScreen({ route, navigation }) {
       // 5. Buscar interesses de casos ativos do cliente
       const interestsData = await supabaseService.getCaseInterests(clientId, session.accessToken);
       setInteresses(interestsData || []);
+      console.log('[DashboardScreen] Interesses de casos carregados:', interestsData?.length || 0);
 
       // 6. Buscar notificações do cliente
       const notifsData = await supabaseService.getNotifications(clientId, session.accessToken);
       setNotifications(notifsData || []);
+      console.log('[DashboardScreen] Notificações do cliente carregadas:', notifsData?.length || 0);
 
     } catch (err) {
       console.error('[DashboardScreen] Erro ao carregar dados do banco:', err);
@@ -937,7 +958,18 @@ export default function DashboardScreen({ route, navigation }) {
       });
 
     return (
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh} 
+            colors={["#f5c853"]} 
+            tintColor="#f5c853" 
+          />
+        }
+      >
         {/* Saudação */}
         <View style={styles.welcomeSection}>
           <Text style={styles.welcomeTitle}>Olá, {getGreetingName()}.</Text>
@@ -1509,7 +1541,18 @@ export default function DashboardScreen({ route, navigation }) {
   // ABA MEUS CASOS
   const renderCasosTab = () => {
     return (
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh} 
+            colors={["#f5c853"]} 
+            tintColor="#f5c853" 
+          />
+        }
+      >
         <View style={styles.welcomeSection}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Text style={styles.welcomeTitle}>Meus Casos</Text>

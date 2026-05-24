@@ -411,7 +411,7 @@ export default function PerfilTab({ userId, accessToken }) {
       contentContainerStyle={styles.scrollContent}
       showsVerticalScrollIndicator={false}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#f5c853" />
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#f5c853" colors={["#f5c853"]} />
       }
     >
       {/* 1. Header Profile summary */}

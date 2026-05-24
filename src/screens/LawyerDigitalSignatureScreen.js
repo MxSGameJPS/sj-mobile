@@ -447,7 +447,7 @@ export default function LawyerDigitalSignatureScreen({ route, navigation }) {
         contentContainerStyle={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#f5c853" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#f5c853" colors={["#f5c853"]} />
         }
       >
         <Text style={styles.subtitle}>

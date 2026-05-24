@@ -143,7 +143,9 @@ export default function LawyerSidebar({ visible, onClose, lawyerProfile = {}, na
                   onPlanPress('A "Calculadora Jurídica" é exclusiva para assinantes do Plano PRO.\n\nGerencie sua assinatura no portal web para liberar o acesso.');
                   return;
                 }
-                handleNotImplemented('Calculadora');
+                // PRO: navega para a tela de Calculadora
+                onClose();
+                navigation.navigate('LawyerCalculadora', { user, session });
               }}>
                 <Feather name="grid" size={20} color="#a0a5b0" style={styles.menuIcon} />
                 <Text style={styles.menuItemText}>Calculadora</Text>

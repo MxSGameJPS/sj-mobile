@@ -6,6 +6,7 @@ import { supabaseService } from '../services/supabaseService';
 
 export default function LawyerInterestsScreen({ route, navigation }) {
   const { user, session } = route.params || {};
+  const accessToken = route.params?.accessToken || session?.accessToken || session?.access_token;
   const [interestsList, setInterestsList] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -20,10 +21,13 @@ export default function LawyerInterestsScreen({ route, navigation }) {
           const formattedList = data.map(interest => ({
             id: interest.id,
             caseId: interest.case_id,
+            interestId: interest.id,
+            clienteId: interest.casos?.cliente_id || null,
             title: interest.casos?.titulo || 'Processo sem título',
             client: interest.casos?.cliente_nome || 'Cliente não identificado',
             status: interest.status === 'PENDING' ? 'Aguardando Resposta' : 'Em Negociação',
-            time: 'Recente' // Idealmente seria um date-fns para calcular o "Há x dias"
+            rawStatus: interest.status,
+            time: 'Recente'
           }));
           
           setInterestsList(formattedList);
@@ -37,6 +41,17 @@ export default function LawyerInterestsScreen({ route, navigation }) {
 
     fetchInterests();
   }, [user, session]);
+
+  const handleOpenChat = (item) => {
+    // Navega de volta ao Dashboard e abre a aba de Mensagens com o chat ativo
+    navigation.navigate('LawyerDashboard', {
+      user,
+      session,
+      accessToken,
+      openChatCaseId: item.caseId,
+      openChatInterestId: item.interestId,
+    });
+  };
 
   const renderItem = ({ item }) => (
     <View style={styles.card}>
@@ -53,10 +68,21 @@ export default function LawyerInterestsScreen({ route, navigation }) {
       </View>
       
       <View style={styles.cardFooter}>
-        <TouchableOpacity style={styles.chatBtn}>
-          <Feather name="message-circle" size={16} color="#0d0f12" />
-          <Text style={styles.chatBtnText}>Abrir Chat</Text>
-        </TouchableOpacity>
+        {item.rawStatus === 'NEGOTIATING' && (
+          <TouchableOpacity
+            style={styles.chatBtn}
+            onPress={() => handleOpenChat(item)}
+          >
+            <Feather name="message-circle" size={16} color="#0d0f12" />
+            <Text style={styles.chatBtnText}>Abrir Chat</Text>
+          </TouchableOpacity>
+        )}
+        {item.rawStatus === 'PENDING' && (
+          <View style={[styles.chatBtn, { backgroundColor: '#2b2d36' }]}>
+            <Feather name="clock" size={16} color="#8e94a2" />
+            <Text style={[styles.chatBtnText, { color: '#8e94a2' }]}>Aguardando</Text>
+          </View>
+        )}
       </View>
     </View>
   );

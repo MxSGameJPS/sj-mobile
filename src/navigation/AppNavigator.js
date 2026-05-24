@@ -15,6 +15,7 @@ import LawyerBlindagemProvasScreen from '../screens/LawyerBlindagemProvasScreen'
 import LawyerBlindagemNotificacaoScreen from '../screens/LawyerBlindagemNotificacaoScreen';
 import LawyerAgendaScreen from '../screens/LawyerAgendaScreen';
 import LawyerAgendaNovoScreen from '../screens/LawyerAgendaNovoScreen';
+import LawyerCalculadoraScreen from '../screens/LawyerCalculadoraScreen';
 import { COLORS } from '../styles/theme';
 
 const Stack = createNativeStackNavigator();
@@ -43,6 +44,7 @@ export default function AppNavigator() {
         <Stack.Screen name="LawyerBlindagemNotificacao" component={LawyerBlindagemNotificacaoScreen} />
         <Stack.Screen name="LawyerAgenda" component={LawyerAgendaScreen} />
         <Stack.Screen name="LawyerAgendaNovo" component={LawyerAgendaNovoScreen} />
+        <Stack.Screen name="LawyerCalculadora" component={LawyerCalculadoraScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

@@ -369,7 +369,7 @@ export default function LawyerAgendaScreen({ route, navigation }) {
       <ScrollView 
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#f5c853" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#f5c853" colors={["#f5c853"]} />
         }
       >
         {/* Buttons Row */}

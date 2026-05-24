@@ -37,6 +37,9 @@ export default function LawyerDashboardScreen({ route, navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchVisible, setSearchVisible] = useState(false);
 
+  // Deep link para abrir chat diretamente (vindo de LawyerInterestsScreen)
+  const [deepLinkChat, setDeepLinkChat] = useState(null);
+
   // Limpa pesquisa ao mudar de aba
   useEffect(() => {
     setSearchQuery('');
@@ -191,6 +194,17 @@ export default function LawyerDashboardScreen({ route, navigation }) {
     fetchData();
   }, [fetchData]);
 
+  // Processar navegação vinda da tela de Interesses para abrir chat direto
+  useEffect(() => {
+    const openChatCaseId = route.params?.openChatCaseId;
+    const openChatInterestId = route.params?.openChatInterestId;
+    if (openChatCaseId) {
+      setCurrentTab('Mensagens');
+      // Passa via state para o MensagensTab via prop (veja renderContent)
+      setDeepLinkChat({ caseId: openChatCaseId, interestId: openChatInterestId || null });
+    }
+  }, [route.params?.openChatCaseId]);
+
   const onRefresh = () => {
     setRefreshing(true);
     fetchData();
@@ -264,8 +278,15 @@ export default function LawyerDashboardScreen({ route, navigation }) {
     );
   };
 
-  const handleLogout = async () => {
-    await supabaseService.signOut();
+  const handleLogout = () => {
+    setIsSidebarOpen(false);
+    const currentSession = route.params?.session;
+    const tok = route.params?.accessToken || currentSession?.accessToken || currentSession?.access_token;
+    if (tok) {
+      supabaseService.signOut(tok).catch(err => {
+        console.warn('[Dashboard] Erro ao fazer logout no background:', err);
+      });
+    }
     navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
   };
 
@@ -286,7 +307,7 @@ export default function LawyerDashboardScreen({ route, navigation }) {
             openCases={openCases}
             activeCases={activeCases}
             refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#f5c853" />
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#f5c853" colors={["#f5c853"]} />
             }
             onPlanPress={() => {
               console.log('[LawyerDashboardScreen] Card Plano Atual pressionado');
@@ -320,6 +341,8 @@ export default function LawyerDashboardScreen({ route, navigation }) {
             accessToken={tok}
             searchQuery={searchQuery}
             setCurrentTab={handleTabChange}
+            deepLinkChat={deepLinkChat}
+            onChatOpened={() => setDeepLinkChat(null)}
           />
         );
       }

@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 
 const LOCAL_IP = '192.168.2.195';
 const WEB_API = __DEV__
@@ -34,14 +35,18 @@ export async function registerForPushNotificationsAsync(accessToken) {
     }
 
     // 2. Obter o token de push do Expo
-    // Tenta de forma automática; caso falhe por falta de ID do projeto em ambiente local de teste, loga o aviso.
+    // Passa o projectId obtido do app.json/extra para ambiente local de desenvolvimento.
     let token = null;
     try {
-      const tokenData = await Notifications.getExpoPushTokenAsync();
+      const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
+      if (!projectId) {
+        console.warn('[PushNotificationService] Aviso: projectId do EAS não encontrado. Verifique app.json.');
+      }
+      const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
       token = tokenData.data;
       console.log('[PushNotificationService] Token gerado:', token);
     } catch (tokenErr) {
-      console.warn('[PushNotificationService] Erro ao buscar token (pode requerer projectId configurado):', tokenErr.message);
+      console.warn('[PushNotificationService] Erro ao buscar token (verifique se google-services.json está presente na build ou se está rodando no Expo Go):', tokenErr.message);
     }
 
     // 3. Registrar o token obtido no backend Next.js

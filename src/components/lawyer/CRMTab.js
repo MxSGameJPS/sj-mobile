@@ -638,7 +638,7 @@ export default function CRMTab({ userId, accessToken, planType, onPlanUpgrade })
     <View style={s.root}>
       <ScrollView
         contentContainerStyle={s.scroll}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadAll(); }} tintColor="#f5c853" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadAll(); }} tintColor="#f5c853" colors={["#f5c853"]} />}
         keyboardShouldPersistTaps="handled"
       >
         {/* ── Header ── */}

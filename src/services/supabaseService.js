@@ -65,6 +65,32 @@ export const supabaseService = {
   },
 
   /**
+   * Realiza logout do usuário (invalida token no Supabase e limpa sessão local)
+   * @param {string} [accessToken] - Token de acesso para invalidar remotamente
+   */
+  async signOut(accessToken) {
+    try {
+      if (accessToken) {
+        await fetch(`${SUPABASE_URL}/auth/v1/logout`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${accessToken}`,
+          },
+        });
+      }
+    } catch (err) {
+      console.warn('[SupabaseService] Erro ao invalidar token remoto:', err);
+    }
+    try {
+      await supabaseRealtime.auth.signOut();
+    } catch (err) {
+      console.warn('[SupabaseService] Erro ao limpar sessão local:', err);
+    }
+  },
+
+  /**
    * Verifica se a OAB já existe no banco de dados para a UF informada
    * @param {string} oab 
    * @param {string} estado 

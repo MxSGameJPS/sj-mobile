@@ -175,7 +175,7 @@ export default function NotificationCenterModal({ visible, onClose, userId, acce
               contentContainerStyle={styles.listContent}
               showsVerticalScrollIndicator={false}
               refreshControl={
-                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#f5c853" />
+                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#f5c853" colors={["#f5c853"]} />
               }
               ListEmptyComponent={
                 <View style={styles.emptyContainer}>
