@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "779074458181",
+    "project_id": "social-juridico-mobile",
+    "storage_bucket": "social-juridico-mobile.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:779074458181:android:a5dbbb26b319f488ec892c",
+        "android_client_info": {
+          "package_name": "com.socialjuridico.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCUkCY9Nfu69sbBFLc8Gh0PIczN57VSnW0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
