@@ -489,7 +489,7 @@ export const supabaseService = {
    */
   async createCase(caseData, accessToken) {
     try {
-      const response = await fetch(`${API_WEB_URL}/api/casos`, {
+      const response = await fetch(`${API_WEB_URL}/casos`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -720,7 +720,7 @@ export const supabaseService = {
    */
   async sendCaseMessage(messageData, accessToken) {
     try {
-      const response = await fetch(`${API_WEB_URL}/api/mensagens`, {
+      const response = await fetch(`${API_WEB_URL}/mensagens`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -877,7 +877,7 @@ export const supabaseService = {
    */
   async respondToInterest(interestId, caseId, lawyerId, action, accessToken) {
     try {
-      const response = await fetch(`${API_WEB_URL}/api/casos/interesse`, {
+      const response = await fetch(`${API_WEB_URL}/casos/interesse`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1072,7 +1072,7 @@ export const supabaseService = {
    */
   async requestChatAiAnalysis(caseId, interestId, messageId, accessToken) {
     try {
-      const response = await fetch(`${API_WEB_URL}/api/chat/analise-ia`, {
+      const response = await fetch(`${API_WEB_URL}/chat/analise-ia`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
