@@ -139,6 +139,7 @@ export default function DashboardScreen({ route, navigation }) {
   const [currentTab, setCurrentTab] = useState("Home");
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(null);
+  const [clientId, setClientId] = useState(null);
   const [cases, setCases] = useState([]);
   const [lawyers, setLawyers] = useState({}); // key: lawyerId -> lawyer object
   const [activeChatCaseId, setActiveChatCaseId] = useState(null);
@@ -291,6 +292,7 @@ export default function DashboardScreen({ route, navigation }) {
         setProfilePhone(profileData.phone || "");
         clientId = profileData.id;
       }
+      setClientId(clientId);
       console.log(
         "[DashboardScreen] Perfil do cliente carregado. clientId:",
         clientId,
@@ -480,6 +482,30 @@ export default function DashboardScreen({ route, navigation }) {
   useEffect(() => {
     loadData();
   }, [user, session]);
+
+  useEffect(() => {
+    if (!clientId || !session?.accessToken) return;
+
+    const channel = supabaseRealtime
+      .channel(`client-notifications-${clientId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "notificacoes",
+          filter: `user_id=eq.${clientId}`,
+        },
+        () => {
+          loadData();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabaseRealtime.removeChannel(channel);
+    };
+  }, [clientId, session?.accessToken]);
 
   // Polling de mensagens no Chat
   useEffect(() => {
