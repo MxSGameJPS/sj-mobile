@@ -1484,7 +1484,7 @@ export default function DashboardScreen({ route, navigation }) {
                             onPress={() => {
                               Alert.alert(
                                 "Contratar Advogado",
-                                `Deseja contratar ${lawyerName} para este caso? Esta ação vinculará o advogado ao processo e debitará 3 Juris de seu saldo.`,
+                                `Deseja contratar ${lawyerName} para este caso? Esta ação vinculará o advogado ao processo e debitará 3 Juris do saldo dele.`,
                                 [
                                   { text: "Cancelar", style: "cancel" },
                                   {

@@ -1,9 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
+import { getApiBaseUrl } from "../config/api";
 
 const SUPABASE_URL = "https://uwkcdwlgobnhowumcdnp.supabase.co";
 const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV3a2Nkd2xnb2JuaG93dW1jZG5wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2MTEyNDIsImV4cCI6MjA4OTE4NzI0Mn0.Nz-2pITIzlzZW-sePHXAyW6Kz19p45vlMN22Z8VEYEk";
-const API_WEB_URL = process.env.EXPO_PUBLIC_API_URL || "http://10.0.2.2:3000"; // URL do Next.js para testes locais (Android emulador) ou URL de Produção
+const API_WEB_URL = getApiBaseUrl();
 
 export const supabaseRealtime = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
@@ -885,7 +886,21 @@ export const supabaseService = {
         body: JSON.stringify({ interestId, action }),
       });
 
-      const data = await response.json();
+      const contentType = response.headers.get("content-type") || "";
+      const rawBody = await response.text();
+      const data = contentType.includes("application/json")
+        ? JSON.parse(rawBody || "{}")
+        : (() => {
+            try {
+              return JSON.parse(rawBody || "{}");
+            } catch {
+              return {
+                success: false,
+                message: rawBody || "Resposta inválida da API",
+              };
+            }
+          })();
+
       if (!response.ok || !data.success) {
         throw new Error(data.message || "Erro ao responder interesse");
       }
