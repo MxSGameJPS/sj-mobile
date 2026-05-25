@@ -59,6 +59,19 @@ const monthLabel = () =>
     .toLocaleDateString("pt-BR", { month: "long", year: "numeric" })
     .toUpperCase();
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("pt-BR") : "--");
+const pad2 = (n) => String(n).padStart(2, "0");
+const toISODate = (date) =>
+  `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+const buildCalendarCells = (year, month) => {
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells = [];
+
+  for (let i = 0; i < firstDay; i += 1) cells.push(null);
+  for (let day = 1; day <= daysInMonth; day += 1) cells.push(day);
+  while (cells.length % 7 !== 0) cells.push(null);
+  return cells;
+};
 
 // ─── DOSSIER TABS ────────────────────────────────────────────────
 const DOSSIER_TABS = [
@@ -512,7 +525,7 @@ export default function CRMTab({
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: [ImagePicker.MediaType.Images],
       quality: 0.8,
     });
     if (!result.canceled && result.assets?.length) {
@@ -1621,6 +1634,47 @@ function DossierFinance({
   saving,
   onToggle,
 }) {
+  const [showDueDateCalendar, setShowDueDateCalendar] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const initialDate = financeForm.due_date
+      ? new Date(`${financeForm.due_date}T12:00:00`)
+      : new Date();
+    return new Date(initialDate.getFullYear(), initialDate.getMonth(), 1);
+  });
+
+  useEffect(() => {
+    if (!showDueDateCalendar) return;
+    const selectedDate = financeForm.due_date
+      ? new Date(`${financeForm.due_date}T12:00:00`)
+      : new Date();
+    setCalendarMonth(
+      new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1),
+    );
+  }, [financeForm.due_date, showDueDateCalendar]);
+
+  const calendarCells = buildCalendarCells(
+    calendarMonth.getFullYear(),
+    calendarMonth.getMonth(),
+  );
+  const calendarTitle = calendarMonth.toLocaleDateString("pt-BR", {
+    month: "long",
+    year: "numeric",
+  });
+
+  const pickDay = (day) => {
+    if (!day) return;
+    const picked = new Date(
+      calendarMonth.getFullYear(),
+      calendarMonth.getMonth(),
+      day,
+      12,
+      0,
+      0,
+    );
+    setFinanceForm((prev) => ({ ...prev, due_date: toISODate(picked) }));
+    setShowDueDateCalendar(false);
+  };
+
   const total = records.reduce((s, r) => s + parseFloat(r.amount || 0), 0);
   const recebido = records
     .filter((r) => r.status === "PAGO")
@@ -1675,11 +1729,6 @@ function DossierFinance({
               placeholder: "0,00",
               keyboardType: "decimal-pad",
             },
-            {
-              label: "Vencimento (AAAA-MM-DD)",
-              key: "due_date",
-              placeholder: "2025-05-31",
-            },
           ].map((f) => (
             <View key={f.key} style={s.fGroup}>
               <Text style={s.fLabel}>{f.label}</Text>
@@ -1695,6 +1744,22 @@ function DossierFinance({
               />
             </View>
           ))}
+
+          <View style={s.fGroup}>
+            <Text style={s.fLabel}>Vencimento</Text>
+            <TouchableOpacity
+              style={s.datePickerBtn}
+              activeOpacity={0.8}
+              onPress={() => setShowDueDateCalendar(true)}
+            >
+              <Feather name="calendar" size={16} color="#f5c853" />
+              <Text style={s.datePickerBtnTxt}>
+                {financeForm.due_date || "Escolher data no calendário"}
+              </Text>
+            </TouchableOpacity>
+            <Text style={s.fHint}>Formato salvo: AAAA-MM-DD</Text>
+          </View>
+
           <Text style={s.fLabel}>STATUS</Text>
           <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
             {["PENDENTE", "PAGO", "CANCELADO"].map((st) => (
@@ -1732,6 +1797,109 @@ function DossierFinance({
           </TouchableOpacity>
         </View>
       )}
+
+      <Modal visible={showDueDateCalendar} transparent animationType="fade">
+        <View style={s.calendarOverlay}>
+          <View style={s.calendarCard}>
+            <View style={s.calendarHeader}>
+              <TouchableOpacity
+                style={s.calendarNavBtn}
+                onPress={() =>
+                  setCalendarMonth(
+                    new Date(
+                      calendarMonth.getFullYear(),
+                      calendarMonth.getMonth() - 1,
+                      1,
+                    ),
+                  )
+                }
+              >
+                <Feather name="chevron-left" size={18} color="#f5c853" />
+              </TouchableOpacity>
+              <Text style={s.calendarTitle}>{calendarTitle}</Text>
+              <TouchableOpacity
+                style={s.calendarNavBtn}
+                onPress={() =>
+                  setCalendarMonth(
+                    new Date(
+                      calendarMonth.getFullYear(),
+                      calendarMonth.getMonth() + 1,
+                      1,
+                    ),
+                  )
+                }
+              >
+                <Feather name="chevron-right" size={18} color="#f5c853" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={s.calendarWeekRow}>
+              {["D", "S", "T", "Q", "Q", "S", "S"].map((day, index) => (
+                <Text key={`${day}-${index}`} style={s.calendarWeekDay}>
+                  {day}
+                </Text>
+              ))}
+            </View>
+
+            <View style={s.calendarGrid}>
+              {calendarCells.map((day, index) => {
+                const isSelected =
+                  day &&
+                  financeForm.due_date ===
+                    toISODate(
+                      new Date(
+                        calendarMonth.getFullYear(),
+                        calendarMonth.getMonth(),
+                        day,
+                        12,
+                        0,
+                        0,
+                      ),
+                    );
+
+                return (
+                  <TouchableOpacity
+                    key={`${index}-${day || "empty"}`}
+                    style={[
+                      s.calendarDay,
+                      !day && s.calendarDayEmpty,
+                      isSelected && s.calendarDaySelected,
+                    ]}
+                    disabled={!day}
+                    onPress={() => pickDay(day)}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[
+                        s.calendarDayTxt,
+                        !day && { opacity: 0 },
+                        isSelected && s.calendarDayTxtSelected,
+                      ]}
+                    >
+                      {day || "-"}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <View style={s.calendarFooter}>
+              <TouchableOpacity
+                style={[s.calendarFooterBtn, s.calendarFooterBtnGhost]}
+                onPress={() => setShowDueDateCalendar(false)}
+              >
+                <Text style={s.calendarFooterBtnGhostTxt}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.calendarFooterBtn, s.calendarFooterBtnPrimary]}
+                onPress={() => setShowDueDateCalendar(false)}
+              >
+                <Text style={s.calendarFooterBtnPrimaryTxt}>Ok</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Records list */}
       <Text style={s.dSectionTitle}>Lançamentos ({records.length})</Text>
@@ -2181,6 +2349,28 @@ const s = StyleSheet.create({
     color: "#fff",
     fontSize: 14,
   },
+  datePickerBtn: {
+    minHeight: 46,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(245,200,83,0.25)",
+    backgroundColor: "rgba(245,200,83,0.06)",
+  },
+  datePickerBtnTxt: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
+    flexShrink: 1,
+  },
+  fHint: {
+    color: "#606672",
+    fontSize: 10,
+    marginTop: 6,
+  },
   saveBtn: {
     backgroundColor: "#f5c853",
     borderRadius: 12,
@@ -2191,6 +2381,109 @@ const s = StyleSheet.create({
     gap: 6,
   },
   saveBtnTxt: { fontSize: 15, fontWeight: "800", color: "#000" },
+
+  calendarOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    justifyContent: "center",
+    padding: 18,
+  },
+  calendarCard: {
+    backgroundColor: "#12141c",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(245,200,83,0.18)",
+    padding: 16,
+  },
+  calendarHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+  calendarNavBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(245,200,83,0.08)",
+  },
+  calendarTitle: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "800",
+    textTransform: "capitalize",
+  },
+  calendarWeekRow: {
+    flexDirection: "row",
+    marginBottom: 8,
+  },
+  calendarWeekDay: {
+    flex: 1,
+    textAlign: "center",
+    color: "#8e94a2",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  calendarGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  calendarDay: {
+    width: `${100 / 7}%`,
+    aspectRatio: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 10,
+    marginBottom: 6,
+  },
+  calendarDayEmpty: {
+    backgroundColor: "transparent",
+  },
+  calendarDaySelected: {
+    backgroundColor: "rgba(245,200,83,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(245,200,83,0.45)",
+  },
+  calendarDayTxt: {
+    color: "#e6e8ef",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  calendarDayTxtSelected: {
+    color: "#f5c853",
+  },
+  calendarFooter: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 14,
+  },
+  calendarFooterBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  calendarFooterBtnGhost: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+  calendarFooterBtnPrimary: {
+    backgroundColor: "#f5c853",
+  },
+  calendarFooterBtnGhostTxt: {
+    color: "#e6e8ef",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  calendarFooterBtnPrimaryTxt: {
+    color: "#090a0d",
+    fontSize: 13,
+    fontWeight: "800",
+  },
 
   // Voice modal
   voiceInfoBox: {

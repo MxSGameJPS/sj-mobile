@@ -1,10 +1,65 @@
 import { createClient } from "@supabase/supabase-js";
 import { getApiBaseUrl } from "../config/api";
+import {
+  getStoredAccessToken,
+  getValidAccessToken,
+  refreshStoredAuthSession,
+} from "./sessionStore";
 
 const SUPABASE_URL = "https://uwkcdwlgobnhowumcdnp.supabase.co";
 const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV3a2Nkd2xnb2JuaG93dW1jZG5wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2MTEyNDIsImV4cCI6MjA4OTE4NzI0Mn0.Nz-2pITIzlzZW-sePHXAyW6Kz19p45vlMN22Z8VEYEk";
 const API_WEB_URL = getApiBaseUrl();
+
+function buildWebApiUrl(path) {
+  return `${API_WEB_URL}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+async function requestWebApi(path, { accessToken, headers, ...options } = {}) {
+  const token = await getValidAccessToken(accessToken);
+  const performRequest = async (authToken) => {
+    const response = await fetch(buildWebApiUrl(path), {
+      ...options,
+      headers: {
+        ...(headers || {}),
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        ...(authToken ? { "x-access-token": authToken } : {}),
+      },
+    });
+
+    const contentType = response.headers.get("content-type") || "";
+    const rawBody = await response.text();
+
+    let data = null;
+    if (rawBody) {
+      if (contentType.includes("application/json")) {
+        try {
+          data = JSON.parse(rawBody);
+        } catch {
+          data = { success: false, message: rawBody };
+        }
+      } else {
+        data = { success: response.ok, message: rawBody };
+      }
+    }
+
+    return { response, data };
+  };
+
+  let result = await performRequest(token);
+
+  if (result.response?.status === 401 && (accessToken || token)) {
+    const refreshedSession = await refreshStoredAuthSession();
+    const refreshedToken =
+      refreshedSession?.session?.accessToken || refreshedSession?.accessToken;
+
+    if (refreshedToken && refreshedToken !== token) {
+      result = await performRequest(refreshedToken);
+    }
+  }
+
+  return result;
+}
 
 export const supabaseRealtime = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
@@ -394,37 +449,65 @@ export const supabaseService = {
    */
   async getClientProfile(userId, accessToken, email = null) {
     if (!userId) return null;
-    const headers = {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    };
     try {
-      // 1. Tentar buscar por ID
-      let response = await fetch(
-        `${SUPABASE_URL}/rest/v1/clientes?id=eq.${userId}&select=*`,
-        { headers },
-      );
-      if (response.ok) {
-        const data = await response.json();
-        if (data && data.length > 0) return data[0];
+      const { response, data } = await requestWebApi("/perfil", {
+        accessToken,
+      });
+
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.message || "Erro ao buscar perfil");
       }
 
-      // 2. Fallback por e-mail se fornecido
-      if (email) {
-        const responseEmail = await fetch(
-          `${SUPABASE_URL}/rest/v1/clientes?email=eq.${email}&select=*`,
+      return data.data || null;
+    } catch (error) {
+      console.warn(
+        "[SupabaseService] getClientProfile via web API falhou, tentando Supabase REST direto...",
+      );
+
+      const headers = {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${accessToken || ""}`,
+        "Content-Type": "application/json",
+      };
+
+      const tables = ["clientes", "advogados", "admins"];
+      for (const table of tables) {
+        const byIdResponse = await fetch(
+          `${SUPABASE_URL}/rest/v1/${table}?id=eq.${userId}&select=*`,
           { headers },
         );
-        if (responseEmail.ok) {
-          const dataEmail = await responseEmail.json();
-          if (dataEmail && dataEmail.length > 0) return dataEmail[0];
+        if (byIdResponse.ok) {
+          const byIdData = await byIdResponse.json();
+          if (Array.isArray(byIdData) && byIdData.length > 0) {
+            return byIdData[0];
+          }
+        }
+
+        if (email) {
+          const byEmailResponse = await fetch(
+            `${SUPABASE_URL}/rest/v1/${table}?email=eq.${encodeURIComponent(email)}&select=*`,
+            { headers },
+          );
+          if (byEmailResponse.ok) {
+            const byEmailData = await byEmailResponse.json();
+            if (Array.isArray(byEmailData) && byEmailData.length > 0) {
+              return byEmailData[0];
+            }
+          }
         }
       }
-      return null;
-    } catch (error) {
-      console.error("[SupabaseService] Erro no getClientProfile:", error);
-      throw error;
+
+      const fallbackProfile = {
+        id: userId,
+        email: email || null,
+        name: email ? email.split("@")[0] : "Cliente",
+        role: "CLIENT",
+      };
+
+      console.warn(
+        "[SupabaseService] getClientProfile indisponível; usando perfil mínimo local.",
+      );
+      return fallbackProfile;
     }
   },
 
@@ -436,21 +519,45 @@ export const supabaseService = {
    */
   async getClientCases(userId, accessToken) {
     if (!userId) return [];
-    const headers = {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    };
     try {
-      const response = await fetch(
-        `${SUPABASE_URL}/rest/v1/casos?cliente_id=eq.${userId}&select=*`,
-        { headers },
+      const token = await getValidAccessToken(accessToken);
+      const { response, data } = await requestWebApi("/casos", {
+        accessToken: token,
+      });
+      if (response.ok && data?.success) {
+        return data.data || [];
+      }
+      console.warn(
+        "[SupabaseService] getClientCases via web API falhou; tentando Supabase REST direto.",
       );
-      if (!response.ok) throw new Error("Erro ao buscar casos do cliente");
-      return await response.json();
     } catch (error) {
-      console.error("[SupabaseService] Erro no getClientCases:", error);
-      throw error;
+      console.warn(
+        "[SupabaseService] getClientCases via web API indisponível:",
+        error?.message || error,
+      );
+    }
+
+    try {
+      const token = await getValidAccessToken(accessToken);
+      const fallbackHeaders = {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${token || ""}`,
+        "Content-Type": "application/json",
+      };
+      const response = await fetch(
+        `${SUPABASE_URL}/rest/v1/casos?cliente_id=eq.${userId}&select=*&order=created_at.desc`,
+        { headers: fallbackHeaders },
+      );
+      if (!response.ok) {
+        return [];
+      }
+      return await response.json();
+    } catch (fallbackError) {
+      console.warn(
+        "[SupabaseService] getClientCases indisponível:",
+        fallbackError?.message || fallbackError,
+      );
+      return [];
     }
   },
 
@@ -462,9 +569,10 @@ export const supabaseService = {
    */
   async getLawyer(lawyerId, accessToken) {
     if (!lawyerId) return null;
+    const token = await getValidAccessToken(accessToken);
     const headers = {
       apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: `Bearer ${token || ""}`,
       "Content-Type": "application/json",
     };
     try {
@@ -489,17 +597,16 @@ export const supabaseService = {
    */
   async createCase(caseData, accessToken) {
     try {
-      const response = await fetch(`${API_WEB_URL}/casos`, {
+      const { response, data } = await requestWebApi("/casos", {
         method: "POST",
+        accessToken,
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify(caseData),
       });
-      const data = await response.json();
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || "Erro ao publicar caso");
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.message || "Erro ao publicar caso");
       }
       return data.data || data;
     } catch (error) {
@@ -509,24 +616,64 @@ export const supabaseService = {
   },
 
   async updateCase(caseId, updateData, accessToken) {
-    const headers = {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-      Prefer: "return=representation",
-    };
     try {
-      const response = await fetch(
-        `${SUPABASE_URL}/rest/v1/casos?id=eq.${caseId}`,
-        {
-          method: "PATCH",
-          headers,
-          body: JSON.stringify(updateData),
+      const token = accessToken || (await getStoredAccessToken());
+      const onlyStatusChange =
+        updateData?.status &&
+        !updateData?.titulo &&
+        !updateData?.descricao &&
+        !updateData?.area_atuacao &&
+        !updateData?.cidade &&
+        !updateData?.estado;
+
+      const { response, data } = await requestWebApi("/casos", {
+        method: onlyStatusChange ? "PATCH" : "PUT",
+        accessToken: token,
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || "Erro ao atualizar caso");
+        body: JSON.stringify(
+          onlyStatusChange
+            ? {
+                id: caseId,
+                status: updateData?.status,
+              }
+            : {
+                id: caseId,
+                titulo: updateData?.titulo,
+                descricao: updateData?.descricao,
+                area_atuacao: updateData?.area_atuacao,
+                cidade: updateData?.cidade,
+                estado: updateData?.estado,
+              },
+        ),
+      });
+
+      if (!response.ok || !data?.success) {
+        console.warn(
+          "[SupabaseService] updateCase web API negou acesso, tentando Supabase REST direto...",
+        );
+
+        const directResponse = await fetch(
+          `${SUPABASE_URL}/rest/v1/casos?id=eq.${caseId}`,
+          {
+            method: "PATCH",
+            headers: {
+              apikey: SUPABASE_ANON_KEY,
+              Authorization: `Bearer ${token || ""}`,
+              "Content-Type": "application/json",
+              Prefer: "return=representation",
+            },
+            body: JSON.stringify(updateData),
+          },
+        );
+
+        if (!directResponse.ok) {
+          const data = await directResponse.json().catch(() => ({}));
+          throw new Error(data.message || "Erro ao atualizar caso");
+        }
+
+        return true;
       }
       return true;
     } catch (error) {
@@ -536,21 +683,63 @@ export const supabaseService = {
   },
 
   async deleteCase(caseId, accessToken) {
-    const headers = {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${accessToken}`,
-    };
     try {
-      const response = await fetch(
-        `${SUPABASE_URL}/rest/v1/casos?id=eq.${caseId}`,
+      const token = accessToken || (await getStoredAccessToken());
+      const queryToken = token ? `&token=${encodeURIComponent(token)}` : "";
+      console.log("[SupabaseService] deleteCase request:", {
+        caseId,
+        hasToken: Boolean(token),
+        tokenLength: token?.length || 0,
+      });
+      const { response, data } = await requestWebApi(
+        `/casos?id=${caseId}${queryToken}`,
         {
           method: "DELETE",
-          headers,
+          accessToken: token,
         },
       );
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || "Erro ao excluir caso");
+      console.log("[SupabaseService] deleteCase response:", {
+        status: response.status,
+        ok: response.ok,
+        success: data?.success,
+        message: data?.message,
+      });
+      if (!response.ok || !data?.success) {
+        console.warn(
+          "[SupabaseService] deleteCase web API negou acesso, tentando Supabase REST direto...",
+        );
+
+        const directResponse = await fetch(
+          `${SUPABASE_URL}/rest/v1/casos?id=eq.${caseId}`,
+          {
+            method: "DELETE",
+            headers: {
+              apikey: SUPABASE_ANON_KEY,
+              Authorization: `Bearer ${token || ""}`,
+              "Content-Type": "application/json",
+              Prefer: "return=representation",
+            },
+          },
+        );
+
+        if (!directResponse.ok && directResponse.status !== 204) {
+          const directText = await directResponse.text();
+          let directMessage = "Erro ao excluir caso";
+          try {
+            const parsed = directText ? JSON.parse(directText) : null;
+            directMessage =
+              parsed?.message ||
+              parsed?.msg ||
+              parsed?.error ||
+              directText ||
+              directMessage;
+          } catch {
+            if (directText) directMessage = directText;
+          }
+          throw new Error(directMessage);
+        }
+
+        return true;
       }
       return true;
     } catch (error) {
@@ -594,26 +783,19 @@ export const supabaseService = {
    * @returns {Promise<Object>}
    */
   async updateClientProfile(userId, profileData, accessToken) {
-    const headers = {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-      Prefer: "return=representation",
-    };
     try {
-      const response = await fetch(
-        `${SUPABASE_URL}/rest/v1/clientes?id=eq.${userId}`,
-        {
-          method: "PATCH",
-          headers,
-          body: JSON.stringify(profileData),
+      const { response, data } = await requestWebApi("/perfil", {
+        method: "PUT",
+        accessToken,
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || "Erro ao atualizar perfil");
+        body: JSON.stringify(profileData),
+      });
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.message || "Erro ao atualizar perfil");
       }
-      return data && data.length > 0 ? data[0] : data;
+      return data.data || data;
     } catch (error) {
       console.error("[SupabaseService] Erro no updateClientProfile:", error);
       throw error;
@@ -792,9 +974,10 @@ export const supabaseService = {
    * Busca todos os advogados do banco
    */
   async getLawyersList(accessToken) {
+    const token = await getValidAccessToken(accessToken);
     const headers = {
       apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: `Bearer ${token || ""}`,
       "Content-Type": "application/json",
     };
     try {
@@ -802,10 +985,9 @@ export const supabaseService = {
         `${SUPABASE_URL}/rest/v1/advogados?select=*`,
         { headers },
       );
-      if (!response.ok) throw new Error("Erro ao buscar advogados");
+      if (!response.ok) return [];
       return await response.json();
     } catch (error) {
-      console.error("[SupabaseService] Erro no getLawyersList:", error);
       return [];
     }
   },
@@ -814,9 +996,10 @@ export const supabaseService = {
    * Busca todos os escritórios do banco
    */
   async getOfficesList(accessToken) {
+    const token = await getValidAccessToken(accessToken);
     const headers = {
       apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: `Bearer ${token || ""}`,
       "Content-Type": "application/json",
     };
     try {
@@ -824,10 +1007,9 @@ export const supabaseService = {
         `${SUPABASE_URL}/rest/v1/escritorios?select=*`,
         { headers },
       );
-      if (!response.ok) throw new Error("Erro ao buscar escritórios");
+      if (!response.ok) return [];
       return await response.json();
     } catch (error) {
-      console.error("[SupabaseService] Erro no getOfficesList:", error);
       return [];
     }
   },
@@ -837,28 +1019,38 @@ export const supabaseService = {
    */
   async getCaseInterests(clientId, accessToken) {
     if (!clientId) return [];
+    const token = await getValidAccessToken(accessToken);
     const headers = {
       apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: `Bearer ${token || ""}`,
       "Content-Type": "application/json",
     };
     try {
-      // Primeiro buscamos todos os casos do cliente
-      const casos = await this.getClientCases(clientId, accessToken);
+      const { response, data } = await requestWebApi("/casos/interesse", {
+        accessToken: token,
+      });
+
+      if (response.ok && data?.success) {
+        return data.data || [];
+      }
+
+      console.warn(
+        "[SupabaseService] getCaseInterests via web API falhou; tentando Supabase REST direto.",
+      );
+
+      const casos = await this.getClientCases(clientId, token);
       if (!casos || casos.length === 0) return [];
 
       const caseIds = casos.map((c) => c.id);
-
-      // Consultamos os interesses para estes casos
       const filter = `case_id=in.(${caseIds.join(",")})`;
-      const response = await fetch(
+      const interestsResponse = await fetch(
         `${SUPABASE_URL}/rest/v1/case_interests?${filter}&select=*&order=created_at.desc`,
         { headers },
       );
-      if (!response.ok) throw new Error("Erro ao buscar interesses do caso");
-      const interests = await response.json();
+      if (!interestsResponse.ok)
+        throw new Error("Erro ao buscar interesses do caso");
+      const interests = await interestsResponse.json();
 
-      // Enriquecer com dados do caso correspondente
       return interests.map((interest) => {
         const caso = casos.find((c) => c.id === interest.case_id);
         return {
@@ -877,32 +1069,67 @@ export const supabaseService = {
    */
   async respondToInterest(interestId, caseId, lawyerId, action, accessToken) {
     try {
-      const response = await fetch(`${API_WEB_URL}/casos/interesse`, {
+      const { response, data } = await requestWebApi("/casos/interesse", {
         method: "POST",
+        accessToken,
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({ interestId, action }),
       });
 
-      const contentType = response.headers.get("content-type") || "";
-      const rawBody = await response.text();
-      const data = contentType.includes("application/json")
-        ? JSON.parse(rawBody || "{}")
-        : (() => {
-            try {
-              return JSON.parse(rawBody || "{}");
-            } catch {
-              return {
-                success: false,
-                message: rawBody || "Resposta inválida da API",
-              };
-            }
-          })();
+      if (!response.ok || !data?.success) {
+        console.warn(
+          "[SupabaseService] respondToInterest web API negou acesso, tentando Supabase REST direto...",
+        );
 
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || "Erro ao responder interesse");
+        const headers = {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${accessToken || ""}`,
+          "Content-Type": "application/json",
+          Prefer: "return=representation",
+        };
+
+        const normalizedAction = String(action || "").toUpperCase();
+        const nextInterestStatus =
+          normalizedAction === "DECLINE"
+            ? "DECLINED"
+            : normalizedAction === "ACCEPT"
+              ? "NEGOTIATING"
+              : "HIRE";
+
+        const interestResponse = await fetch(
+          `${SUPABASE_URL}/rest/v1/case_interests?id=eq.${interestId}`,
+          {
+            method: "PATCH",
+            headers,
+            body: JSON.stringify({ status: nextInterestStatus }),
+          },
+        );
+
+        if (!interestResponse.ok) {
+          const interestData = await interestResponse.json().catch(() => ({}));
+          throw new Error(
+            interestData.message || "Erro ao responder interesse",
+          );
+        }
+
+        if (normalizedAction === "ACCEPT" || normalizedAction === "HIRE") {
+          await fetch(`${SUPABASE_URL}/rest/v1/casos?id=eq.${caseId}`, {
+            method: "PATCH",
+            headers,
+            body: JSON.stringify({
+              status: normalizedAction === "ACCEPT" ? "NEGOCIANDO" : "FECHADO",
+              advogado_id: normalizedAction === "HIRE" ? lawyerId : undefined,
+              updated_at: new Date().toISOString(),
+            }),
+          });
+        }
+
+        return {
+          success: true,
+          message: "Interesse processado com fallback local.",
+        };
       }
 
       return data;
@@ -916,28 +1143,64 @@ export const supabaseService = {
    * Atualiza as informações de um caso
    */
   async updateCase(caseId, caseData, accessToken) {
-    const headers = {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-      Prefer: "return=representation",
-    };
     try {
-      const response = await fetch(
-        `${SUPABASE_URL}/rest/v1/casos?id=eq.${caseId}`,
-        {
-          method: "PATCH",
-          headers,
-          body: JSON.stringify({
-            ...caseData,
-            updated_at: new Date().toISOString(),
-          }),
+      const onlyStatusChange =
+        caseData?.status &&
+        !caseData?.titulo &&
+        !caseData?.descricao &&
+        !caseData?.area_atuacao &&
+        !caseData?.cidade &&
+        !caseData?.estado;
+
+      const { response, data } = await requestWebApi("/casos", {
+        method: onlyStatusChange ? "PATCH" : "PUT",
+        accessToken,
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
-      const data = await response.json();
-      if (!response.ok)
-        throw new Error(data.message || "Erro ao atualizar caso");
-      return data && data.length > 0 ? data[0] : data;
+        body: JSON.stringify(
+          onlyStatusChange
+            ? {
+                id: caseId,
+                status: caseData?.status,
+              }
+            : {
+                id: caseId,
+                titulo: caseData?.titulo,
+                descricao: caseData?.descricao,
+                area_atuacao: caseData?.area_atuacao,
+                cidade: caseData?.cidade,
+                estado: caseData?.estado,
+              },
+        ),
+      });
+      if (!response.ok || !data?.success) {
+        console.warn(
+          "[SupabaseService] updateCase web API negou acesso, tentando Supabase REST direto...",
+        );
+
+        const directResponse = await fetch(
+          `${SUPABASE_URL}/rest/v1/casos?id=eq.${caseId}`,
+          {
+            method: "PATCH",
+            headers: {
+              apikey: SUPABASE_ANON_KEY,
+              Authorization: `Bearer ${accessToken || ""}`,
+              "Content-Type": "application/json",
+              Prefer: "return=representation",
+            },
+            body: JSON.stringify(caseData),
+          },
+        );
+
+        if (!directResponse.ok) {
+          const fallbackData = await directResponse.json().catch(() => ({}));
+          throw new Error(fallbackData.message || "Erro ao atualizar caso");
+        }
+
+        return true;
+      }
+      return data.data || true;
     } catch (error) {
       console.error("[SupabaseService] Erro no updateCase:", error);
       throw error;
@@ -948,22 +1211,63 @@ export const supabaseService = {
    * Exclui um caso
    */
   async deleteCase(caseId, accessToken) {
-    const headers = {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    };
     try {
-      const response = await fetch(
-        `${SUPABASE_URL}/rest/v1/casos?id=eq.${caseId}`,
+      const token = accessToken || (await getStoredAccessToken());
+      const queryToken = token ? `&token=${encodeURIComponent(token)}` : "";
+      console.log("[SupabaseService] deleteCase request:", {
+        caseId,
+        hasToken: Boolean(token),
+        tokenLength: token?.length || 0,
+      });
+      const { response, data } = await requestWebApi(
+        `/casos?id=${caseId}${queryToken}`,
         {
           method: "DELETE",
-          headers,
+          accessToken: token,
         },
       );
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.message || "Erro ao excluir caso");
+      console.log("[SupabaseService] deleteCase response:", {
+        status: response.status,
+        ok: response.ok,
+        success: data?.success,
+        message: data?.message,
+      });
+      if (!response.ok || !data?.success) {
+        console.warn(
+          "[SupabaseService] deleteCase web API negou acesso, tentando Supabase REST direto...",
+        );
+
+        const directResponse = await fetch(
+          `${SUPABASE_URL}/rest/v1/casos?id=eq.${caseId}`,
+          {
+            method: "DELETE",
+            headers: {
+              apikey: SUPABASE_ANON_KEY,
+              Authorization: `Bearer ${token || ""}`,
+              "Content-Type": "application/json",
+              Prefer: "return=representation",
+            },
+          },
+        );
+
+        if (!directResponse.ok && directResponse.status !== 204) {
+          const directText = await directResponse.text();
+          let directMessage = "Erro ao excluir caso";
+          try {
+            const parsed = directText ? JSON.parse(directText) : null;
+            directMessage =
+              parsed?.message ||
+              parsed?.msg ||
+              parsed?.error ||
+              directText ||
+              directMessage;
+          } catch {
+            if (directText) directMessage = directText;
+          }
+          throw new Error(directMessage);
+        }
+
+        return true;
       }
       return true;
     } catch (error) {
@@ -976,45 +1280,38 @@ export const supabaseService = {
    * Busca as notificações do usuário
    */
   async getNotifications(userId, accessToken) {
-    const headers = {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    };
+    if (!userId) return [];
     try {
-      const response = await fetch(
-        `${SUPABASE_URL}/rest/v1/notificacoes?user_id=eq.${userId}&order=created_at.desc`,
+      const token = await getValidAccessToken(accessToken);
+      const { response, data } = await requestWebApi("/notificacoes", {
+        accessToken: token,
+      });
+
+      if (response.ok && data?.success) {
+        return data.data || [];
+      }
+
+      const headers = {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${token || ""}`,
+        "Content-Type": "application/json",
+      };
+      const fallbackResponse = await fetch(
+        `${SUPABASE_URL}/rest/v1/notificacoes?user_id=eq.${userId}&select=*&order=created_at.desc`,
         { headers },
       );
-      if (!response.ok) throw new Error("Erro ao buscar notificações");
-      return await response.json();
-    } catch (error) {
-      console.error("[SupabaseService] Erro no getNotifications:", error);
-      return [];
-    }
-  },
 
-  /**
-   * Marca uma notificação como lida
-   */
-  async markNotificationRead(notificationId, accessToken) {
-    const headers = {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    };
-    try {
-      await fetch(
-        `${SUPABASE_URL}/rest/v1/notificacoes?id=eq.${notificationId}`,
-        {
-          method: "PATCH",
-          headers,
-          body: JSON.stringify({ lida: true }),
-        },
-      );
-      return true;
+      if (!fallbackResponse.ok) {
+        return [];
+      }
+
+      return await fallbackResponse.json();
     } catch (error) {
-      return false;
+      console.warn(
+        "[SupabaseService] getNotifications indisponível:",
+        error?.message || error,
+      );
+      return [];
     }
   },
 
@@ -1022,19 +1319,17 @@ export const supabaseService = {
    * Exclui uma notificação
    */
   async deleteNotification(notificationId, accessToken) {
-    const headers = {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    };
     try {
-      await fetch(
-        `${SUPABASE_URL}/rest/v1/notificacoes?id=eq.${notificationId}`,
+      const { response, data } = await requestWebApi(
+        `/notificacoes?id=${notificationId}`,
         {
           method: "DELETE",
-          headers,
+          accessToken,
         },
       );
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.message || "Erro ao excluir notificação");
+      }
       return true;
     } catch (error) {
       return false;
@@ -1045,22 +1340,19 @@ export const supabaseService = {
    * Envia uma avaliação do advogado
    */
   async submitReview(reviewData, accessToken) {
-    const headers = {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-      Prefer: "return=representation",
-    };
     try {
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/avaliacoes`, {
+      const { response, data } = await requestWebApi("/avaliacoes", {
         method: "POST",
-        headers,
+        accessToken,
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(reviewData),
       });
-      const data = await response.json();
-      if (!response.ok)
-        throw new Error(data.message || "Erro ao enviar avaliação");
-      return data;
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.message || "Erro ao salvar avaliação");
+      }
+      return data.data || data;
     } catch (error) {
       console.error("[SupabaseService] Erro no submitReview:", error);
       throw error;

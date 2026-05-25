@@ -20,6 +20,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { COLORS } from "../styles/theme";
 import { supabaseService, supabaseRealtime } from "../services/supabaseService";
+import { clearAuthSession, saveAuthSession } from "../services/sessionStore";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import * as LocalAuthentication from "expo-local-authentication";
@@ -171,6 +172,7 @@ export default function DashboardScreen({ route, navigation }) {
   const [profilePassword, setProfilePassword] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [caseActionLoadingId, setCaseActionLoadingId] = useState(null);
 
   // Chat states
   const [chatMessages, setChatMessages] = useState([]);
@@ -202,6 +204,14 @@ export default function DashboardScreen({ route, navigation }) {
   const [isAnjoModalOpen, setIsAnjoModalOpen] = useState(false);
 
   const scrollViewRef = useRef(null);
+
+  useEffect(() => {
+    if (session?.accessToken) {
+      saveAuthSession({ session, user, role }).catch((err) => {
+        console.warn("[DashboardScreen] Erro ao persistir sessão:", err);
+      });
+    }
+  }, [session, user, role]);
 
   // --- Helpers de Permissão ---
   const requestCameraPermission = async () => {
@@ -316,10 +326,11 @@ export default function DashboardScreen({ route, navigation }) {
         session.accessToken,
       );
       if (casesData) {
-        setCases(casesData);
+        const visibleCases = casesData.filter((c) => c.status !== "CANCELADO");
+        setCases(visibleCases);
         console.log(
           "[DashboardScreen] Casos do cliente carregados:",
-          casesData.length,
+          visibleCases.length,
         );
 
         // Mapear informações dos advogados correspondentes
@@ -389,6 +400,7 @@ export default function DashboardScreen({ route, navigation }) {
   };
 
   const handleDeleteCase = (caseId) => {
+    if (caseActionLoadingId) return;
     Alert.alert(
       "Excluir Caso",
       "Tem certeza que deseja excluir este caso definitivamente?",
@@ -398,12 +410,15 @@ export default function DashboardScreen({ route, navigation }) {
           text: "Excluir",
           style: "destructive",
           onPress: async () => {
+            setCaseActionLoadingId(caseId);
             try {
               await supabaseService.deleteCase(caseId, session.accessToken);
               setCases((prev) => prev.filter((c) => c.id !== caseId));
               Alert.alert("Sucesso", "Caso excluído com sucesso.");
             } catch (err) {
               Alert.alert("Erro", err.message);
+            } finally {
+              setCaseActionLoadingId(null);
             }
           },
         },
@@ -412,6 +427,7 @@ export default function DashboardScreen({ route, navigation }) {
   };
 
   const handleFinishCase = (caseObj, lawyerObj) => {
+    if (caseActionLoadingId) return;
     Alert.alert(
       "Concluir Caso",
       "Tem certeza de que deseja marcar este caso como concluído? Você poderá avaliar o advogado.",
@@ -420,6 +436,7 @@ export default function DashboardScreen({ route, navigation }) {
         {
           text: "Concluir",
           onPress: async () => {
+            setCaseActionLoadingId(caseObj.id);
             try {
               await supabaseService.updateCase(
                 caseObj.id,
@@ -440,6 +457,8 @@ export default function DashboardScreen({ route, navigation }) {
               }
             } catch (err) {
               Alert.alert("Erro", err.message);
+            } finally {
+              setCaseActionLoadingId(null);
             }
           },
         },
@@ -486,7 +505,7 @@ export default function DashboardScreen({ route, navigation }) {
   useEffect(() => {
     if (!clientId || !session?.accessToken) return;
 
-    const channel = supabaseRealtime
+    const notificationsChannel = supabaseRealtime
       .channel(`client-notifications-${clientId}`)
       .on(
         "postgres_changes",
@@ -502,8 +521,24 @@ export default function DashboardScreen({ route, navigation }) {
       )
       .subscribe();
 
+    const interestsChannel = supabaseRealtime
+      .channel(`client-case-interests-${clientId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "case_interests",
+        },
+        () => {
+          loadData();
+        },
+      )
+      .subscribe();
+
     return () => {
-      supabaseRealtime.removeChannel(channel);
+      supabaseRealtime.removeChannel(notificationsChannel);
+      supabaseRealtime.removeChannel(interestsChannel);
     };
   }, [clientId, session?.accessToken]);
 
@@ -546,6 +581,9 @@ export default function DashboardScreen({ route, navigation }) {
   }, [activeChatCaseId, activeChatInterestId, session]);
 
   const handleLogout = () => {
+    clearAuthSession().catch((err) => {
+      console.warn("[DashboardScreen] Erro ao limpar sessão local:", err);
+    });
     navigation.reset({
       index: 0,
       routes: [{ name: "Login" }],
@@ -684,7 +722,7 @@ export default function DashboardScreen({ route, navigation }) {
           return;
         }
         result = await ImagePicker.launchCameraAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          mediaTypes: [ImagePicker.MediaType.Images],
           allowsEditing: false,
           quality: 0.8,
         });
@@ -699,7 +737,7 @@ export default function DashboardScreen({ route, navigation }) {
           return;
         }
         result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          mediaTypes: [ImagePicker.MediaType.Images],
           allowsEditing: false,
           quality: 0.8,
         });
@@ -942,7 +980,7 @@ export default function DashboardScreen({ route, navigation }) {
           return;
         }
         result = await ImagePicker.launchCameraAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          mediaTypes: [ImagePicker.MediaType.Images],
           allowsEditing: false,
           quality: 0.8,
         });
@@ -957,7 +995,7 @@ export default function DashboardScreen({ route, navigation }) {
           return;
         }
         result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          mediaTypes: [ImagePicker.MediaType.Images],
           allowsEditing: false,
           quality: 0.8,
         });
@@ -1260,10 +1298,22 @@ export default function DashboardScreen({ route, navigation }) {
       >
         {/* Saudação */}
         <View style={styles.welcomeSection}>
-          <Text style={styles.welcomeTitle}>Olá, {getGreetingName()}.</Text>
-          <Text style={styles.welcomeSub}>
-            Aqui está o resumo atualizado das suas demandas legais.
-          </Text>
+          <View style={styles.homeHeaderRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.welcomeTitle}>Olá, {getGreetingName()}.</Text>
+              <Text style={styles.welcomeSub}>
+                Aqui está o resumo atualizado das suas demandas legais.
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.logoutBtn}
+              activeOpacity={0.8}
+              onPress={handleLogout}
+            >
+              <Feather name="log-out" size={16} color="#f5c853" />
+              <Text style={styles.logoutBtnText}>Sair</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Advogados Online Badge */}
@@ -2381,23 +2431,7 @@ export default function DashboardScreen({ route, navigation }) {
                     borderTopColor: "#1a1d24",
                   }}
                 >
-                  {(c.status === "ABERTO" || c.status === "NEGOCIANDO") && (
-                    <>
-                      <TouchableOpacity
-                        style={{ padding: 6, marginRight: 10 }}
-                        onPress={() => handleEditCase(c.id)}
-                      >
-                        <Feather name="edit-2" size={16} color="#8e94a2" />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={{ padding: 6, marginRight: 10 }}
-                        onPress={() => handleDeleteCase(c.id)}
-                      >
-                        <Feather name="trash-2" size={16} color="#ff4d4d" />
-                      </TouchableOpacity>
-                    </>
-                  )}
-                  {c.status === "EM_ANDAMENTO" && (
+                  {c.status !== "FECHADO" && (
                     <TouchableOpacity
                       style={{
                         backgroundColor: "rgba(57, 211, 83, 0.1)",
@@ -2408,6 +2442,7 @@ export default function DashboardScreen({ route, navigation }) {
                         alignItems: "center",
                       }}
                       onPress={() => handleFinishCase(c, lawyerObj)}
+                      disabled={caseActionLoadingId === c.id}
                     >
                       <Feather
                         name="check-circle"
@@ -2422,10 +2457,43 @@ export default function DashboardScreen({ route, navigation }) {
                           fontWeight: "bold",
                         }}
                       >
-                        Concluir Caso
+                        {caseActionLoadingId === c.id
+                          ? "Processando..."
+                          : "Concluir Caso"}
                       </Text>
                     </TouchableOpacity>
                   )}
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: "rgba(255, 77, 77, 0.1)",
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
+                      borderRadius: 6,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      marginLeft: 10,
+                    }}
+                    onPress={() => handleDeleteCase(c.id)}
+                    disabled={caseActionLoadingId === c.id}
+                  >
+                    <Feather
+                      name="trash-2"
+                      size={14}
+                      color="#ff4d4d"
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text
+                      style={{
+                        color: "#ff4d4d",
+                        fontSize: 12,
+                        fontWeight: "bold",
+                      }}
+                    >
+                      {caseActionLoadingId === c.id
+                        ? "Processando..."
+                        : "Apagar"}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               </TouchableOpacity>
             );
@@ -4561,6 +4629,12 @@ const styles = StyleSheet.create({
   welcomeSection: {
     marginBottom: 16,
   },
+  homeHeaderRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
   welcomeTitle: {
     fontSize: 22,
     fontWeight: "bold",
@@ -4571,6 +4645,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#8e94a2",
     lineHeight: 20,
+  },
+  logoutBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2d3140",
+    backgroundColor: "#12151c",
+  },
+  logoutBtnText: {
+    color: "#f5c853",
+    fontSize: 12,
+    fontWeight: "700",
   },
   onlineBadge: {
     flexDirection: "row",

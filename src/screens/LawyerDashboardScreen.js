@@ -34,6 +34,7 @@ import MensagensTab from "../components/lawyer/MensagensTab";
 import PerfilTab from "../components/lawyer/PerfilTab";
 import NotificationCenterModal from "../components/lawyer/NotificationCenterModal";
 import { registerForPushNotificationsAsync } from "../services/pushNotificationService";
+import { clearAuthSession } from "../services/sessionStore";
 
 export default function LawyerDashboardScreen({ route, navigation }) {
   const { session, user, role } = route.params || {};
@@ -153,22 +154,29 @@ export default function LawyerDashboardScreen({ route, navigation }) {
 
       // Busca dados de perfil do advogado (incluindo saldo de Juris)
       try {
-        const profileRes = await fetch(`${WEB_API}/perfil`, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-          },
-        });
-        const profileJson = await profileRes.json();
-        if (profileJson.success && profileJson.data) {
-          const profile = profileJson.data;
+        const profile = await supabaseService.getClientProfile(
+          userId,
+          accessToken,
+          currentUser?.email || user?.email || null,
+        );
+
+        if (profile) {
           setLawyerProfile({
-            name: profile.name || currentUser?.user_metadata?.name || "",
-            plan_type: profile.plan_type || "FREE",
+            name:
+              profile.name ||
+              currentUser?.user_metadata?.name ||
+              currentUser?.email?.split("@")[0] ||
+              "",
+            plan_type:
+              profile.plan_type ||
+              profile.plan ||
+              profile.subscription ||
+              "FREE",
             oab_verification_status:
-              profile.oab_verification_status || "PENDING",
-            juris_balance: profile.balance || 0,
+              profile.oab_verification_status ||
+              (profile.verified ? "VERIFIED" : "PENDING"),
+            juris_balance:
+              profile.balance ?? profile.juris_balance ?? profile.juris ?? 0,
           });
         }
       } catch (err) {
@@ -351,6 +359,9 @@ export default function LawyerDashboardScreen({ route, navigation }) {
 
   const handleLogout = () => {
     setIsSidebarOpen(false);
+    clearAuthSession().catch((err) => {
+      console.warn("[LawyerDashboard] Erro ao limpar sessão local:", err);
+    });
     const currentSession = route.params?.session;
     const tok =
       route.params?.accessToken ||

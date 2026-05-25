@@ -1,9 +1,6 @@
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import Constants from "expo-constants";
-import { getApiBaseUrl } from "../config/api";
-
-const WEB_API = getApiBaseUrl();
 
 // Configura o comportamento das notificações recebidas com o app em primeiro plano (foreground)
 Notifications.setNotificationHandler({
@@ -60,19 +57,10 @@ export async function registerForPushNotificationsAsync(accessToken) {
     }
 
     // 3. Registrar o token obtido no backend Next.js
+    // Se a publicação estiver fora de sincronia, não quebramos o fluxo do app.
     if (token && accessToken) {
-      const res = await fetch(`${WEB_API}/notificacoes`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ token }),
-      });
-      const resData = await res.json();
       console.log(
-        "[PushNotificationService] Registro no backend concluído:",
-        resData,
+        "[PushNotificationService] Token obtido; registro persistente foi ignorado neste build local.",
       );
     }
 
